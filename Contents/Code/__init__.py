@@ -24,6 +24,7 @@ htsurl = 'http://%s:%s@%s:%s/%s/' % (username, password, hostname, web_port, str
 TEXT_TITLE = u'HTS-TVheadend'
 TEXT_CHANNELS = u'All Channels'
 TEXT_TAGS = u'Tags'
+TEXT_EPG = u'EPG'
 TEXT_PREFERENCES = u'Settings'
 
 ####################################################################################################
@@ -42,6 +43,7 @@ def MainMenu():
 	menu = ObjectContainer(title1=TEXT_TITLE)
 	menu.add(DirectoryObject(key=Callback(GetChannels, prevTitle=TEXT_TITLE), title=TEXT_CHANNELS, thumb=R('channel.png')))
 	menu.add(DirectoryObject(key=Callback(GetbyTags, prevTitle=TEXT_TITLE), title=TEXT_TAGS, thumb=R('tag.png')))
+	menu.add(DirectoryObject(key=Callback(GetbyTags, prevTitle=TEXT_TITLE, epgMenu=True), title=TEXT_EPG, thumb=R('tag.png')))
 	menu.add(PrefsObject(title=TEXT_PREFERENCES, thumb=R('settings.png')))
 
 	return menu
@@ -58,15 +60,46 @@ def getTVHeadendJson(what, url = False):
         json_data = json.loads(json_tmp)
         return json_data
 
-def GetbyTags(prevTitle):
+def GetbyTags(prevTitle, epgMenu=False):
 	json_data = getTVHeadendJson('channeltags')
 	tagList = ObjectContainer(title1=prevTitle, title2=TEXT_TAGS,)
 
 	for tag in json_data['entries']:
-		tagList.add(DirectoryObject(key=Callback(GetChannels, prevTitle=tag['name'], tag=int(tag['identifier'])), title=tag['name'], thumb=R('tag.png')))
+		if (epgMenu == False):
+			tagList.add(DirectoryObject(key=Callback(GetChannels, prevTitle=tag['name'], tag=int(tag['identifier'])), title=tag['name'], thumb=R('tag.png')))
+		else:
+			tagList.add(DirectoryObject(key=Callback(GetChannels, prevTitle=tag['name'], tag=int(tag['identifier']), epgMenu=True), title=tag['name'], thumb=R('tag.png')))
+		
 	return tagList
+def GetChannelEPG(prevTitle,epg_channel):
+	json_data = getTVHeadendJson('epg',url='start=0&limit=100&channel=%s' % epg_channel)
+	epgItems = ObjectContainer(title1=prevTitle, title2='EPG',)
+	#MenuList = PopupDirectoryObject(title='test', summary='test summ')
 
-def GetChannels(prevTitle, tag=int(0)):
+	for epg in json_data['entries']:
+		duration = 0
+		epg_start = 0
+		epg_end = 0
+		epg_summary = ''
+		epg_title = ''	
+	        if 'duration' in epg:
+     			duration = epg['duration']*1000
+     		if 'start' in epg:
+        		epg_start = time.strftime("%H:%M", time.localtime(int(epg['start'])))
+     		if 'end' in epg:
+       			epg_end = time.strftime("%H:%M", time.localtime(int(epg['end'])))
+    		if 'description' in epg:
+    			epg_summary = epg['description']
+   		if 'title' in epg:
+   			epg_title = "%s %s" % (epg_start, epg['title'])
+			epg_summary = '%s (%s-%s)\n\n%s' % (epg['title'],epg_start,epg_end, epg_summary)
+		if epg_title != '':
+			epgItems.add(DirectoryObject(key=Callback(GetChannels, prevTitle=epg_channel), title=epg_title, summary=epg_summary, thumb=R('tag.png')))
+		
+	return epgItems
+
+
+def GetChannels(prevTitle, tag=int(0), epgMenu=False):
 	json_data = getTVHeadendJson('channels')
 	json_data_epg = getTVHeadendJson('epg')
 	channelList = ObjectContainer(title1=prevTitle, title2=TEXT_CHANNELS,)
@@ -97,7 +130,7 @@ def GetChannels(prevTitle, tag=int(0)):
 			else:
 				icons = R('channel.png')
 
-		if name != '':
+		if (name != '' and epgMenu == False):
 			# Add epg
 			for epg in json_data_epg['entries']:
 				if int(epg['channelid']) == int(id):
@@ -122,5 +155,8 @@ def GetChannels(prevTitle, tag=int(0)):
 				vco = VideoClipObject(title=name, thumb=icons,  summary=summary, duration=duration, url='%s%s' % (htsurl, id))
 			vco.add(mo)
 			channelList.add(vco)
+		elif (name != '' and epgMenu == True):
+        		channelList.add(DirectoryObject(key=Callback(GetChannelEPG, prevTitle=TEXT_TITLE,epg_channel=channel['name']), title=channel['name'], thumb=R('channel.png')))
+
        	return channelList
 
